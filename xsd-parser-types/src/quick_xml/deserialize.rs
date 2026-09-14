@@ -1453,6 +1453,17 @@ mod tests {
         Unknown__,
     }
 
+    fn entry_state(state: &TestTypeState) -> Option<TestTypeState> {
+        use TestTypeState as S;
+
+        match state {
+            S::Init__ => Some(S::Init__),
+            S::A(None) => Some(S::A(None)),
+            S::B(None) => Some(S::B(None)),
+            _ => None,
+        }
+    }
+
     #[derive(Debug)]
     struct TestTypeDeserializer {
         a: Option<String>,
@@ -1468,10 +1479,10 @@ mod tests {
         ) -> Result<(), Error> {
             match state {
                 TestTypeState::A(Some(deserializer)) => {
-                    self.store_a(deserializer.finish(helper)?)?
+                    self.store_a(deserializer.finish(helper)?)?;
                 }
                 TestTypeState::B(Some(deserializer)) => {
-                    self.store_b(deserializer.finish(helper)?)?
+                    self.store_b(deserializer.finish(helper)?)?;
                 }
                 _ => (),
             }
@@ -1516,9 +1527,9 @@ mod tests {
 
                 if matches!(&fallback, Some(TestTypeState::Init__)) {
                     return Ok(ElementHandlerOutput::break_(event, allow_any));
-                } else {
-                    return Ok(ElementHandlerOutput::return_to_root(event, allow_any));
                 }
+
+                return Ok(ElementHandlerOutput::return_to_root(event, allow_any));
             }
 
             if let Some(fallback) = fallback.take() {
@@ -1606,13 +1617,7 @@ mod tests {
             let mut event = event;
             let mut fallback = None;
             let mut allow_any_element = false;
-
-            let entry_state__ = match &*self.state__ {
-                S::Init__ => Some(S::Init__),
-                S::A(None) => Some(S::A(None)),
-                S::B(None) => Some(S::B(None)),
-                _ => None,
-            };
+            let entry_state__ = entry_state(&self.state__);
 
             let (event, allow_any) = loop {
                 let state = replace(&mut *self.state__, S::Unknown__);
@@ -1666,7 +1671,7 @@ mod tests {
                     }
                     (S::A(None), event @ (Event::Start(_) | Event::Empty(_))) => {
                         let output =
-                            helper.init_start_tag_deserializer(event, Some(&NS), b"A", false)?;
+                            helper.init_start_tag_deserializer(event, Some(NS), b"A", false)?;
 
                         match self.handle_a(helper, output, &mut fallback)? {
                             ElementHandlerOutput::Continue { event, allow_any } => {
@@ -1681,7 +1686,7 @@ mod tests {
                     }
                     (S::B(None), event @ (Event::Start(_) | Event::Empty(_))) => {
                         let output =
-                            helper.init_start_tag_deserializer(event, Some(&NS), b"B", false)?;
+                            helper.init_start_tag_deserializer(event, Some(NS), b"B", false)?;
 
                         match self.handle_b(helper, output, &mut fallback)? {
                             ElementHandlerOutput::Continue { event, allow_any } => {
@@ -1734,7 +1739,7 @@ mod tests {
 
         fn is_known_start_tag(helper: &DeserializeHelper, x: &BytesStart<'_>) -> bool {
             matches!(
-                helper.resolve_local_name(x.name(), &NS),
+                helper.resolve_local_name(x.name(), NS),
                 Some(name) if name == b"A" || name == b"B"
             )
         }

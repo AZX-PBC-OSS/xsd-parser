@@ -982,7 +982,7 @@ impl ComplexBase<'_> {
     }
 
     fn render_deserializer_fn_is_known_start_tag(
-        ctx: &Context<'_, '_>,
+        _ctx: &Context<'_, '_>,
         checks: &[TokenStream],
     ) -> Option<TokenStream> {
         if checks.is_empty() {
