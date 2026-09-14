@@ -586,8 +586,104 @@ mod read {
         assert_eq!(obj.pos, None);
     }
 
-    /* Async driver */
+    // Unknown empty element with a rebound default namespace: no subtree is
+    // skipped, but the namespace scope must still be popped lazily, so that
+    // the following known elements resolve correctly.
+    #[test]
+    fn v2_unknown_empty_with_default_namespace_rebind() {
+        let obj = read_ok::<Root>(
+            "<tns:Root xmlns:tns=\"http://example.com\"> \
+                 <Unknown xmlns=\"urn:evil\"/> \
+                 <tns:A>value</tns:A> \
+                 <tns:Pos>after</tns:Pos> \
+             </tns:Root>",
+        );
 
+        assert_eq!(obj.a, "value");
+        assert_eq!(obj.pos.as_deref(), Some("after"));
+    }
+
+    // An unknown element nested inside a complex child element, whose tag
+    // matches a known but already exhausted element of the root type, is a
+    // content model violation and must still be rejected: the event surfaces
+    // unconsumed at the driver and the `is_known_start_tag` check of the root
+    // type rejects it.
+    #[test]
+    fn v2_nested_unknown_colliding_with_root_model_rejected() {
+        read_err::<Outer, _>(
+            "<tns:Outer xmlns:tns=\"http://example.com\"> \
+                 <tns:Child> \
+                     <tns:Inner>inner</tns:Inner> \
+                     <tns:Child>junk</tns:Child> \
+                 </tns:Child> \
+                 <tns:B>outer</tns:B> \
+             </tns:Outer>",
+            is_unexpected_event,
+        );
+    }
+
+    // Upstream event bubbling semantics: an unknown element inside a complex
+    // child, whose tag matches a still open slot of the root type, is claimed
+    // by the state machine of the root type (the event is consumed and never
+    // surfaces at the driver). This behavior is independent of the skip logic
+    // and must not be changed by it.
+    #[test]
+    fn v2_nested_unknown_claimed_by_open_root_slot() {
+        let obj = read_ok::<Outer>(
+            "<tns:Outer xmlns:tns=\"http://example.com\"> \
+                 <tns:Child> \
+                     <tns:Inner>inner</tns:Inner> \
+                     <tns:B>collide</tns:B> \
+                 </tns:Child> \
+             </tns:Outer>",
+        );
+
+        assert_eq!(obj.child.inner, "inner");
+        assert_eq!(obj.child.extra, None);
+        assert_eq!(obj.b.as_deref(), Some("collide"));
+    }
+
+    // Unknown element that surfaces from a nested child deserializer (two
+    // levels below the root) while the child deserializer is staged in the
+    // fallback slot: after the skip, the child must still complete correctly.
+    #[test]
+    fn v3_unknown_from_nested_child_completes_child() {
+        let obj = read_ok::<Outer>(
+            "<tns:Outer xmlns:tns=\"http://example.com\"> \
+                 <tns:Child> \
+                     <tns:Inner>inner</tns:Inner> \
+                     <tns:Extra>extra</tns:Extra> \
+                     <tns:Inner>junk</tns:Inner> \
+                 </tns:Child> \
+                 <tns:B>after</tns:B> \
+             </tns:Outer>",
+        );
+
+        assert_eq!(obj.child.inner, "inner");
+        assert_eq!(obj.child.extra.as_deref(), Some("extra"));
+        assert_eq!(obj.b.as_deref(), Some("after"));
+    }
+
+    // An attribute that merely starts with `xmlns` (e.g. `xmlnsx`) is not a
+    // namespace declaration: inside a skipped subtree it must neither break
+    // the namespace scope stack nor the parse.
+    #[test]
+    fn v2_xmlns_lookalike_attribute_inside_skip() {
+        let obj = read_ok::<Root>(
+            "<tns:Root xmlns:tns=\"http://example.com\"> \
+                 <tns:Unknown xmlnsx=\"junk\"> \
+                     <D xmlnsx2=\"junk\"/>
+                 </tns:Unknown> \
+                 <tns:A>value</tns:A> \
+                 <tns:Pos>after</tns:Pos> \
+             </tns:Root>",
+        );
+
+        assert_eq!(obj.a, "value");
+        assert_eq!(obj.pos.as_deref(), Some("after"));
+    }
+
+    /* Async driver */
     // The async driver shares the `handle_event` implementation with the
     // sync driver: unknown elements must be skipped as well.
     #[tokio::test]
