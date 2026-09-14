@@ -91,5 +91,6 @@ mod tuple_with_vec;
 mod type_loops;
 mod type_name_clash;
 mod union;
+mod unknown_element_in_sequence;
 mod with_namespace_trait;
 mod xsd_string;
